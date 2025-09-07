@@ -1,0 +1,16 @@
+openai
+torch
+transformers
+gTTS
+SpeechRecognition
+pyaudio
+streamlit
+# .e-
+
+# openai>=1.0.0
+# torch>=2.0.0
+# transformers>=4.30.0
+# gTTS>=2.3.2
+# SpeechRecognition>=3.10.0
+# pyaudio>=0.2.13
+# streamlit>=1.25.0
