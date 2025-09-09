@@ -1,10 +1,12 @@
-openai
-torch
-transformers
-gTTS
-SpeechRecognition
-pyaudio
 streamlit
+requests
+pyttsx3
+pyaudio       # for mic input
+speechrecognition  # to capture mic, optional if using direct audio upload
+python-dotenv
+sounddevice
+playsound     
+python-dotenv
 # .e-
 
 # openai>=1.0.0
