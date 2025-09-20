@@ -1,12 +1,10 @@
-streamlit
+python-dotenv
 requests
-pyttsx3
-pyaudio       # for mic input
-speechrecognition  # to capture mic, optional if using direct audio upload
-python-dotenv
 sounddevice
-playsound     
-python-dotenv
+soundfile
+playsound
+pyttsx3
+pydub
 # .e-
 
 # openai>=1.0.0
