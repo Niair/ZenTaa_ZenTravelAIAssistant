@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 load_dotenv()  # loads .env in project root
 
 STT_PROVIDER = os.getenv("STT_PROVIDER", "deepgram").lower()
+STT_PROVIDER = "faster_whisper"  # options: faster_whisper, assemblyai
+WHISPER_MODEL_SIZE = "base"  # options: tiny, base, small, medium, large, large-v2, large-v3
+WHISPER_LANGUAGE = "hi"  
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "huggingface").lower()
 TTS_PROVIDER = os.getenv("TTS_PROVIDER", "elevenlabs").lower()
 
@@ -14,4 +17,4 @@ COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
 
-RECORD_SECONDS = int(os.getenv("RECORD_SECONDS", "5"))
+RECORD_SECONDS = int(os.getenv("RECORD_SECONDS", "10"))

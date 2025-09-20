@@ -5,6 +5,9 @@ soundfile
 playsound
 pyttsx3
 pydub
+torch 
+torchaudio 
+silero-vad
 # .e-
 
 # openai>=1.0.0
