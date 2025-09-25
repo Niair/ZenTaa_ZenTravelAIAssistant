@@ -22,7 +22,7 @@ class LLMEngine:
                     {"role": "system", "content": system_message},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,  # Lower temperature for more consistent responses
+                temperature=0.0,  # Lower temperature for more consistent responses
                 max_tokens=150
             )
             return resp.choices[0].message.content

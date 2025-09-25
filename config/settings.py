@@ -7,7 +7,7 @@ class Settings:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
     ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
-
+    TTSOPENAI_API_KEY = os.getenv("TTSOPENAI_API_KEY")
 
 STT_PROVIDER = os.getenv("STT_PROVIDER", "deepgram").lower()
 
