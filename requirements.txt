@@ -8,12 +8,24 @@ pydub
 torch 
 torchaudio 
 silero-vad
+pyctcdecode
+
+# pip install torch torchaudio transformers librosa sounddevice python-dotenv huggingface_hub accelerate
+# pip install python-dotenv
+# pip install flash-attn --no-build-isolation
+# pip install torch torchaudio transformers librosa sounddevice python-dotenv huggingface_hub accelerate
+# pip install --upgrade transformers accelerate datasets
+
+
+
 # .e-
 
-# openai>=1.0.0
-# torch>=2.0.0
-# transformers>=4.30.0
-# gTTS>=2.3.2
-# SpeechRecognition>=3.10.0
-# pyaudio>=0.2.13
-# streamlit>=1.25.0
+# torch>=2.1.0
+# torchaudio>=2.1.0
+# transformers>=4.35.0
+# librosa>=0.10.0
+# sounddevice>=0.4.6
+# python-dotenv>=1.0.0
+# huggingface_hub>=0.19.0
+# accelerate>=0.24.0
+# numpy>=1.24.0

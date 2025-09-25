@@ -1,183 +1,188 @@
-# <stt.py>
-
+# src/components/stt_working.py
+import torch
+from transformers import pipeline
 import sounddevice as sd
 import numpy as np
-import torch
-import collections
-import sys
-import logging
-import tempfile
-import wave
-import os
-from src.core.exception import CustomException
-from config import settings
+import gc
+import warnings
 
-# --- Silero VAD Setup ---
-try:
-    model, utils = torch.hub.load(
-        repo_or_dir='snakers4/silero-vad',
-        model='silero_vad',
-        force_reload=False,
-        onnx=False
-    )
-    (get_speech_timestamps, save_audio, read_audio, VADIterator, collect_chunks) = utils
-except Exception as e:
-    logging.error(f"Failed to load Silero VAD model: {e}")
-    model = None
+# Suppress warnings for clean output
+warnings.filterwarnings("ignore")
 
-# --- Faster Whisper Setup ---
-faster_whisper_model = None
-if settings.STT_PROVIDER == "faster_whisper":
-    try:
-        from faster_whisper import WhisperModel
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        compute_type = "float16" if device == "cuda" else "int8"
-        faster_whisper_model = WhisperModel(
-            settings.WHISPER_MODEL_SIZE, 
-            device=device, 
-            compute_type=compute_type
+class WorkingSTT:
+    def __init__(self):
+        print("🚀 Loading Whisper Large V3 (Fixed Version)...")
+        
+        # Use pipeline which handles token limits automatically
+        self.pipe = pipeline(
+            "automatic-speech-recognition",
+            model="openai/whisper-large-v3",
+            device=0 if torch.cuda.is_available() else -1,
+            dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
+            chunk_length_s=10,
+            return_timestamps=False
         )
-        logging.info(f"Loaded faster-whisper model on {device}")
-    except Exception as e:
-        logging.error(f"Failed to load faster-whisper model: {e}")
-        faster_whisper_model = None
+        
+        print("✅ Ready for Hindi/English/Hinglish transcription (100% FREE)")
 
-def record_until_silence(
-    sample_rate=16000,
-    chunk_size=512,  # Fixed to 512 as required by VAD
-    padding_ms=800,
-    speech_threshold=0.4
-):
-    """
-    Record audio from the microphone until a period of silence is detected
-    using the Silero VAD model.
-    """
-    if model is None:
-        raise CustomException("Silero VAD model is not loaded. Cannot record.", sys)
+    def record_audio(self, duration=20):
+        """Record audio from microphone"""
+        print(f"🎙️ Recording for {duration} seconds...")
+        print("💡 Speak naturally in Hindi, English, or mix both!")
+        
+        audio = sd.rec(int(duration * 16000), samplerate=16000, channels=1, dtype='float32')
+        sd.wait()
+        print("✅ Recording finished!")
+        
+        # Normalize audio
+        audio = audio.flatten()
+        if np.max(np.abs(audio)) > 0:
+            audio = audio / np.max(np.abs(audio)) * 0.95
+        
+        return audio
 
-    num_padding_chunks = int(padding_ms / 1000 * sample_rate / chunk_size)
+    def transcribe_audio(self, audio, lang=None):
+        """Improved transcription with optional language forcing"""
+        print("📝 Transcribing...")
 
-    ring_buffer = collections.deque(maxlen=num_padding_chunks)
-    triggered = False
-    voiced_chunks = []
-
-    logging.info("🎤 Listening... Speak now!")
-
-    # Create a VAD iterator for more efficient processing
-    vad_iterator = VADIterator(model)
-    
-    with sd.InputStream(samplerate=sample_rate, blocksize=chunk_size,
-                        dtype='float32', channels=1) as stream:
-        while True:
-            # Read a chunk of audio data from the microphone
-            audio_chunk_np, overflowed = stream.read(chunk_size)
-            if overflowed:
-                logging.warning("Audio buffer overflowed!")
-
-            # Convert numpy array to a torch tensor
-            audio_chunk_tensor = torch.from_numpy(audio_chunk_np[:, 0])
-
-            # Use VAD iterator for speech probability
-            speech_dict = vad_iterator(audio_chunk_tensor, return_seconds=True)
-            is_speech = speech_dict is not None
-
-            if not triggered:
-                ring_buffer.append((audio_chunk_tensor, is_speech))
-                num_voiced = len([chunk for chunk, speech in ring_buffer if speech])
-
-                # If enough speech frames are in the buffer, trigger recording
-                if num_voiced > 0.8 * ring_buffer.maxlen:
-                    triggered = True
-                    logging.info("🎙️ Speech detected...")
-                    # Dump the buffer to start the recording
-                    for chunk, s in ring_buffer:
-                        voiced_chunks.append(chunk)
-                    ring_buffer.clear()
-            else:
-                # We are actively recording
-                voiced_chunks.append(audio_chunk_tensor)
-                ring_buffer.append((audio_chunk_tensor, is_speech))
-                num_unvoiced = len([chunk for chunk, speech in ring_buffer if not speech])
-
-                # If the buffer is full of silence, stop recording
-                if num_unvoiced > 0.9 * ring_buffer.maxlen:
-                    logging.info("🛑 Silence detected. Stopping recording.")
-                    break
-
-    # Reset the VAD iterator
-    vad_iterator.reset()
-    
-    # Concatenate all recorded chunks into a single tensor
-    if not voiced_chunks:
-        logging.warning("No speech detected.")
-        return None
-
-    full_recording_tensor = torch.cat(voiced_chunks)
-    return full_recording_tensor.numpy()
-
-class FasterWhisperProvider:
-    @staticmethod
-    def transcribe_from_mic(*args, **kwargs):
-        """
-        Records audio and transcribes it using faster-whisper.
-        """
         try:
-            if faster_whisper_model is None:
-                raise CustomException("Faster-whisper model is not loaded.", sys)
-                
-            # Record audio using VAD
-            audio_data = record_until_silence()
-            
-            if audio_data is None:
-                return ""
-                
-            # Save audio to a temporary file for faster-whisper
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                with wave.open(tmp_file.name, 'wb') as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)  # 16-bit
-                    wf.setframerate(16000)
-                    # Convert float32 to int16
-                    audio_data_int16 = (audio_data * 32767).astype(np.int16)
-                    wf.writeframes(audio_data_int16.tobytes())
-                
-                # Transcribe using faster-whisper
-                segments, info = faster_whisper_model.transcribe(
-                    tmp_file.name, 
-                    beam_size=5,
-                    language=settings.WHISPER_LANGUAGE if hasattr(settings, 'WHISPER_LANGUAGE') else None
+            if lang:
+                result = self.pipe(
+                    {"array": audio, "sampling_rate": 16000},
+                    language=lang,
+                    max_new_tokens=200,
+                    temperature=0.0
                 )
-            
-            # Combine all segments into a single text
-            transcription = " ".join(segment.text for segment in segments)
-            
-            logging.info(f"Detected language: {info.language} with probability {info.language_probability}")
-            return transcription
-            
+            else:
+                result = self.pipe(
+                    {"array": audio, "sampling_rate": 16000},
+                    max_new_tokens=200,
+                    temperature=0.0
+                )
+
+            text = result["text"].strip()
+            return text
+
         except Exception as e:
-            raise CustomException(e, sys)
-        finally:
-            # Clean up temporary file
+            print(f"❌ Transcription failed: {e}")
+            return ""
+
+        
+
+    def transcribe_chunks(self, audio, chunk_duration=25):
+        """Transcribe long audio in smaller chunks"""
+        chunk_samples = chunk_duration * 16000
+        results = []
+        total_chunks = (len(audio) + chunk_samples - 1) // chunk_samples
+        
+        print(f"📊 Processing {total_chunks} chunks of {chunk_duration}s each...")
+        
+        for i in range(0, len(audio), chunk_samples):
+            chunk_num = i // chunk_samples + 1
+            chunk = audio[i:i+chunk_samples]
+            
+            if len(chunk) > 8000:  # Skip very short chunks (< 0.5s)
+                print(f"🔄 Processing chunk {chunk_num}/{total_chunks}...")
+                result = self.transcribe_audio(chunk)
+                if result:
+                    results.append(result)
+                    print(f"👉 Chunk {chunk_num}: {result}")
+                else:
+                    print(f"⏭️ Chunk {chunk_num}: silent or failed")
+        
+        return " ".join(results)
+
+    def record_and_transcribe(self, duration=20):
+        """Complete workflow: record and transcribe"""
+        # Record audio
+        audio = self.record_audio(duration)
+        
+        # Choose transcription method based on duration
+        if duration > 30:
+            print("📊 Using chunked transcription for long audio...")
+            final_text = self.transcribe_chunks(audio)
+        else:
+            print("📝 Using single transcription...")
+            final_text = self.transcribe_audio(audio)
+        
+        # Post-process result
+        if final_text:
+            # Clean up common issues
+            final_text = final_text.replace("  ", " ").strip()
+            
+            # Basic Hinglish corrections
+            corrections = {
+                "मैं को": "मुझे",
+                "में को": "मुझे",
+                "है को": "है जो",
+                "आप को": "आपको"
+            }
+            
+            for wrong, correct in corrections.items():
+                final_text = final_text.replace(wrong, correct)
+            
+            print(f"\n🎉 FINAL TRANSCRIPTION:")
+            print(f"📝 {final_text}")
+            
+            # Save to file
             try:
-                os.unlink(tmp_file.name)
+                with open("transcription.txt", "w", encoding="utf-8") as f:
+                    f.write(final_text)
+                print(f"💾 Saved to transcription.txt")
             except:
                 pass
+                
+        else:
+            print(f"\n⚠️ No transcription generated")
+            print("💡 Try:")
+            print("   - Speaking louder/clearer")
+            print("   - Moving closer to microphone")
+            print("   - Reducing background noise")
+        
+        return final_text
 
-def get_stt_provider():
-    if settings.STT_PROVIDER == "faster_whisper":
-        return FasterWhisperProvider()
-    else:
-        # Default to faster-whisper
-        return FasterWhisperProvider()
+    def test_microphone(self):
+        """Test if microphone is working"""
+        print("🎤 Testing microphone for 3 seconds...")
+        test_audio = sd.rec(int(3 * 16000), samplerate=16000, channels=1, dtype='float32')
+        sd.wait()
+        
+        volume = np.max(np.abs(test_audio))
+        print(f"🔊 Audio level: {volume:.3f}")
+        
+        if volume > 0.01:
+            print("✅ Microphone is working!")
+            return True
+        else:
+            print("❌ Microphone seems quiet - check your settings")
+            return False
 
-# Add this at the end of stt.py
+# Main usage
 if __name__ == "__main__":
-    # Simple test when run directly
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    
-    print("Testing STT module directly...")
-    stt = get_stt_provider()
-    print("Please speak for 5 seconds after the message...")
-    text = stt.transcribe_from_mic(record_seconds=5)
-    print(f"Transcribed text: {text}")
+    try:
+        print("🎯 FREE Local Hindi/English STT System (Fixed)")
+        print("=" * 60)
+        
+        # Initialize STT
+        stt = WorkingSTT()
+        
+        # Test microphone first
+        print("\n🧪 Testing microphone...")
+        stt.test_microphone()
+        
+        print("\n" + "=" * 60)
+        print("🎤 Ready to transcribe! Press Ctrl+C to stop anytime")
+        print("=" * 60)
+        
+        # Record and transcribe
+        result = stt.record_and_transcribe(duration=15)  # Reduced to 15s for reliability
+        
+        if result:
+            print(f"\n✅ SUCCESS! Transcription completed.")
+        else:
+            print(f"\n❌ No result - please try again with clearer audio")
+        
+    except KeyboardInterrupt:
+        print("\n\n👋 Stopped by user. Goodbye!")
+    except Exception as e:
+        print(f"\n❌ Unexpected error: {e}")
