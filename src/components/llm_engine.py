@@ -1,66 +1,41 @@
-import sys
 import requests
-from src.core.logger import logger as logging
-from src.core.exception import CustomException
-from config import settings
+import ollama
+from groq import Groq
+from config.settings import Settings
 
-class BaseLLM:
-    def generate(self, user_input: str) -> str:
-        raise NotImplementedError
-
-class HuggingFaceLLM(BaseLLM):
-    def __init__(self, api_key=None, model="google/flan-t5-large"):
-        self.api_key = api_key or settings.HF_API_KEY
-        self.model = model
-        if not self.api_key:
-            raise ValueError("HF_API_KEY not set in .env")
-        self.url = f"https://api-inference.huggingface.co/models/{self.model}"
-        self.headers = {"Authorization": f"Bearer {self.api_key}"}
-
-    def generate(self, user_input: str, max_tokens=128):
+class LLMEngine:
+    def __init__(self):
         try:
-            prompt = f"Reply in Hinglish, friendly conversational style. Keep replies short and helpful.\nUser: {user_input}\nZen:"
-            logging.info(f"Sending to HF: {prompt[:200]}...")
-            resp = requests.post(self.url, headers=self.headers, json={"inputs": prompt, "parameters": {"max_new_tokens": max_tokens}}, timeout=60)
-            data = resp.json()
-            logging.info(f"HuggingFace raw response: {data}")
-            if isinstance(data, list) and "generated_text" in data[0]:
-                return data[0]["generated_text"].strip()
-            if isinstance(data, dict) and "error" in data:
-                return f"LLM error: {data['error']}"
-            return "Sorry, mujhe samajh nahi aaya."
-        except Exception as e:
-            logging.error("HuggingFace LLM call failed")
-            raise CustomException(e, sys)
+            self.client = Groq(api_key=Settings.GROQ_API_KEY)
+            # ✅ Use latest Groq supported model
+            self.model = "llama-3.1-8b-instant"
+            self.primary = True
+        except Exception:
+            self.primary = False
 
-class CohereLLM(BaseLLM):
-    def __init__(self, api_key=None):
-        self.api_key = api_key or settings.COHERE_API_KEY
-        if not self.api_key:
-            raise ValueError("COHERE_API_KEY not set in .env")
-        self.url = "https://api.cohere.ai/generate"
-        self.headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
-
-    def generate(self, user_input: str, max_tokens=128):
-        try:
-            prompt = f"Reply in Hinglish, friendly conversational style. User: {user_input}"
-            logging.info("Sending to Cohere...")
-            resp = requests.post(self.url, headers=self.headers, json={"prompt": prompt, "max_tokens": max_tokens})
-            data = resp.json()
-            logging.info(f"Cohere raw response: {data}")
-            if "generations" in data and len(data["generations"]) > 0:
-                return data["generations"][0]["text"].strip()
-            return "Sorry, mujhe samajh nahi aaya."
-        except Exception as e:
-            logging.error("Cohere LLM call failed")
-            raise CustomException(e, sys)
-
-def get_llm_provider():
-    prov = settings.LLM_PROVIDER
-    if prov == "huggingface":
-        return HuggingFaceLLM()
-    elif prov == "cohere":
-        return CohereLLM()
-    else:
-        logging.warning("Unknown LLM provider, defaulting to HuggingFace")
-        return HuggingFaceLLM()
+    def query(self, prompt: str):
+        system_message = "You are a helpful travel assistant. Keep responses concise and factual."
+        if self.primary:
+            resp = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,  # Lower temperature for more consistent responses
+                max_tokens=150
+            )
+            return resp.choices[0].message.content
+        else:
+            try:
+                # Try Ollama locally
+                return ollama.chat(model="llama2", messages=[{"role": "user", "content": prompt}])["message"]["content"]
+            except Exception:
+                # Fallback to Perplexity API
+                headers = {
+                    "Authorization": f"Bearer {Settings.PERPLEXITY_API_KEY}",
+                    "Content-Type": "application/json",
+                }
+                data = {"model": "llama-3.1-8b-instruct", "messages": [{"role": "user", "content": prompt}]}
+                r = requests.post("https://api.perplexity.ai/chat/completions", headers=headers, json=data)
+                return r.json()["choices"][0]["message"]["content"]

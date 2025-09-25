@@ -16,7 +16,16 @@ pyctcdecode
 # pip install torch torchaudio transformers librosa sounddevice python-dotenv huggingface_hub accelerate
 # pip install --upgrade transformers accelerate datasets
 
-
+torch
+torchaudio
+transformers
+accelerate
+sounddevice
+faster-whisper
+groq
+ollama
+requests
+elevenlabs
 
 # .e-
 

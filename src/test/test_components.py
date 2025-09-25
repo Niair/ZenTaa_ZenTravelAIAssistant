@@ -1,3 +1,5 @@
+import sys
+import os
 from src.components.stt import STT
 from src.components.llm_engine import LLMEngine
 from src.components.tts import TTS
